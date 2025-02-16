@@ -1,128 +1,65 @@
-const Order = require("../models/orderModel");
-const Product = require("../models/productModel");
+
+
 const createError = require("http-errors");
-const { successResponse, errorResponse } = require("./responseController");
-const { stripeSecretKey } = require("../secret");
-const stripe = require("stripe")(stripeSecretKey); // Replace with your Stripe secret key
+const { successResponse } = require("./responseController");
+const Order = require("../models/orderModel"); // Adjust the path based on your project structure
 
 
-
-// Create a new order
+/**
+ * @desc Create a new order
+ * @route POST /api/orders
+ * @access Public or Authenticated (based on your auth setup)
+ */
 const createOrder = async (req, res, next) => {
   try {
-    const { userId, products, totalAmount, paymentMethod, paymentId } = req.body;
+    const {boatDetails, duration, groupSize, baseCost, paymentServiceFee, totalFee, orderStatus, paymentStatus } = req.body;
 
-    if (!userId || !products || !totalAmount || !paymentMethod) {
-      throw createError(400, "All fields are required");
-    }
+    const user = req.user._id
 
-    let calculatedTotalAmount = 0;
-
-    // Check product availability and calculate total amount
-    for (const item of products) {
-      const product = await Product.findById(item.product);
-
-      if (!product || product.quantity < item.quantity) {
-        throw createError(400, `Product ${product?.title || "unknown"} is out of stock or not available`);
-      }
-
-      // Calculate total cost (price * quantity)
-      calculatedTotalAmount +=  item.price* item.quantity;
-    }
-
-    // Validate total amount
-    if (calculatedTotalAmount !== totalAmount) {
-      throw createError(
-        400,
-        `Total amount mismatch. Calculated: ${calculatedTotalAmount}, Provided: ${totalAmount}`
-      );
-    }
-
-    // Deduct product quantities from stock
-    for (const item of products) {
-      await Product.findByIdAndUpdate(item.product, {
-        $inc: { quantity: -item.quantity },
-      });
-    }
-
-    // Create the order
-    const order = new Order({
-      user: userId,
-      products,
-      totalAmount: calculatedTotalAmount, // Save the calculated amount
-      paymentMethod,
-      paymentId,
+    // Creating a new order
+    const newOrder = new Order({
+      user,
+      boatDetails,
+      duration,
+      groupSize,
+      baseCost,
+      paymentServiceFee,
+      totalFee,
+      orderStatus,
+      paymentStatus,
     });
 
-    // Save the order
-    const savedOrder = await order.save();
+    await newOrder.save();
 
     return successResponse(res, {
       statusCode: 201,
-      message: "Order successfully created",
-      payload: savedOrder,
+      message: "Order created successfully",
+      payload: newOrder,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// Get all orders by user
-const getUserOrders = async (req, res, next) => {
-  try {
-    const { userId } = req.params;
-
-    const orders = await Order.find({ user: userId })
-
-    return successResponse(res, {
-      statusCode: 200,
-      message: "Orders successfully retrieved",
-      payload: orders,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// Get a single order by ID
-const getSingleOrder = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const order = await Order.findById(id).populate("products.product");
-
-    if (!order) {
-      throw createError(404, "Order not found");
-    }
-
-    return successResponse(res, {
-      statusCode: 200,
-      message: "Order successfully retrieved",
-      payload: order,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// Update order status
+/**
+ * @desc Update an existing order
+ * @route PUT /api/orders/:orderId
+ * @access Authenticated (based on your auth setup)
+ */
 const updateOrder = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const { status } = req.body;
+    const { orderId } = req.params;
 
-    const updatedOrder = await Order.findByIdAndUpdate(
-      id,
-      { status, updatedAt: new Date() },
-      { new: true, runValidators: true }
-    );
+    // Find order and update with new data
+    const updatedOrder = await Order.findByIdAndUpdate(orderId, req.body, { new: true });
 
-    if (!updatedOrder) {
-      throw createError(404, "Order not found");
-    }
+    // if (!updatedOrder) {
+    //   return res.status(404).json({ message: "Order not found" });
+    // }
 
     return successResponse(res, {
       statusCode: 200,
-      message: "Order successfully updated",
+      message: "Order updated successfully",
       payload: updatedOrder,
     });
   } catch (error) {
@@ -130,77 +67,198 @@ const updateOrder = async (req, res, next) => {
   }
 };
 
-// Delete an order
-const deleteOrder = async (req, res, next) => {
+/**
+ * @desc Get all orders for a specific user
+ * @route GET /api/orders/user/:userId
+ * @access Authenticated (based on your auth setup)
+ */
+const getUserOrdersd = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const deletedOrder = await Order.findByIdAndDelete(id);
 
-    if (!deletedOrder) {
-      throw createError(404, "Order not found");
-    }
+    const { userId } = req.user._id;
+    const { search = "", page = 1, limit = 10 } = req.query;
+
+    // Convert page and limit to numbers
+    const pageNumber = parseInt(page, 10) || 1;
+    const pageSize = parseInt(limit, 10) || 10;
+
+    // Search filter (case-insensitive regex search on orderStatus & paymentStatus)
+    const searchFilter = search
+      ? {
+          $or: [
+            { orderStatus: { $regex: search, $options: "i" } },
+            { paymentStatus: { $regex: search, $options: "i" } },
+          ],
+        }
+      : {};
+
+      
+
+    // Find orders with pagination
+    const orders = await Order.find({ user: userId, ...searchFilter })
+      .populate("boatDetails user")
+      .skip((pageNumber - 1) * pageSize)
+      .limit(pageSize)
+      .sort({ createdAt: -1 }); // Sort by latest orders
+
+      console.log("check this order",orders);
+      
+
+    // Get total count for pagination metadata
+    const totalOrders = await Order.countDocuments({ user: userId, ...searchFilter });
 
     return successResponse(res, {
       statusCode: 200,
-      message: "Order successfully deleted",
-      payload: deletedOrder,
+      message: "Orders successfully retrieved",
+      payload: {
+        orders,
+        pagination: {
+          totalOrders,
+          currentPage: pageNumber,
+          totalPages: Math.ceil(totalOrders / pageSize),
+          pageSize,
+        },
+      },
     });
   } catch (error) {
     next(error);
   }
 };
 
-// Payment integration (example using Stripe)
-const handlePayment = async (req, res, next) => {
+/**
+ * @desc Add a review for a boat listing
+ * @route POST /api/reviews/:boatId
+ * @access Authenticated
+ */
+const addReview = async (req, res, next) => {
   try {
-    const { orderId } = req.body;
+    const { boatId } = req.params;
+    const { rating, comment } = req.body;
+    const userId = req.user.id; // Assuming user is authenticated and added to req.user
 
-    const paymentMethods = await stripe.paymentMethods.list({
-      customer: "cus_123456789", 
-      type: "card",
-    });
-    
-    const paymentMethodId = paymentMethods.data[0]?.id; 
-
-    const order = await Order.findById(orderId);
-    if (!order) {
-      throw createError(404, "Order not found");
-    }
-
-    // Implement Stripe payment process
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: order.totalAmount * 100, // Amount in cents
-      currency: "usd",
-      payment_method: paymentMethodId,
-      confirmation_method: "manual",
-      confirm: true,
+    // Check if the user has a completed order for this boat
+    const completedOrder = await Order.findOne({
+      user: userId,
+      boatDetails: boatId,
+      orderStatus: "completed",
     });
 
-    if (paymentIntent.status === "succeeded") {
-      order.paymentStatus = "Completed";
-      order.paymentTimestamp = new Date();
-      order.status = "Paid";
-    } else {
-      order.paymentStatus = "Failed";
+    if (!completedOrder) {
+      return errorResponse(res, {
+        statusCode: 403,
+        message: "You can only review boats you have booked and completed orders for.",
+      });
     }
 
-    await order.save();
+    // Find the boat listing
+    const boat = await BoatLister.findById(boatId);
+    if (!boat) {
+      return errorResponse(res, { statusCode: 404, message: "Boat not found" });
+    }
+
+    // Check if the user has already left a review
+    const existingReview = boat.reviews.find((review) => review.user.toString() === userId);
+    if (existingReview) {
+      return errorResponse(res, { statusCode: 400, message: "You have already reviewed this boat." });
+    }
+
+    // Add review to the boat
+    boat.reviews.push({
+      user: userId,
+      rating,
+      comment,
+    });
+
+    await boat.save();
 
     return successResponse(res, {
-      statusCode: 200,
-      message: "Payment processed successfully",
-      payload: order,
+      statusCode: 201,
+      message: "Review added successfully",
+      payload: boat.reviews,
     });
   } catch (error) {
     next(error);
+  }
+};
+
+
+const getUserOrders = async (req, res, next) => {
+  try {
+
+    const user = req.user._id;
+
+    // Parse query parameters
+    const search = req.query.search?.trim() || "";
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit, 10) || 10);
+
+    // Escape special characters in search input
+    const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const searchRegExp = new RegExp(escapeRegExp(search), "i");
+
+    let filter = {};
+
+    // If search is provided, add the $or condition
+    if (search) {
+      filter.$or = [
+        { paymentStatus: searchRegExp },
+        { orderStatus: searchRegExp },
+
+      ];
+    }
+
+    // Count total boats matching the filter
+    const totalOrder= await Order.countDocuments(user, filter);
+
+    if (totalOrder === 0) {
+      return successResponse(res, {
+        statusCode: 200,
+        message: "No BoatLister found matching the search criteria.",
+        payload: {
+          order: [],
+          pagination: {
+            totalPages: 0,
+            currentPage: 0,
+            previousPage: null,
+            nextPage: null,
+          },
+        },
+      });
+    }
+
+    // Fetch boats with pagination and populate user data (excluding password)
+    const orders = await Order.find(filter)
+    .populate({
+      path: "user boatDetails",
+    })
+    .limit(limit)
+    .skip((page - 1) * limit)
+    .exec();
+  
+    const totalPages = Math.ceil(totalOrder / limit);
+
+    // Respond with the filtered and paginated data
+    return successResponse(res, {
+      statusCode: 200,
+      message: "BoatLister details successfully returned.",
+      payload: {
+        orders,
+        pagination: {
+          totalPages,
+          currentPage: page,
+          previousPage: page > 1 ? page - 1 : null,
+          nextPage: page < totalPages ? page + 1 : null,
+        },
+      },
+    });
+  } catch (error) {
+    next(createError(500, error.message || "Failed to retrieve boatLister details."));
   }
 };
 
 module.exports = {
   createOrder,
-  getUserOrders,
-  getSingleOrder,
   updateOrder,
-  deleteOrder,
-  handlePayment,
+  getUserOrders,
+  addReview
 };

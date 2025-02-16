@@ -8,7 +8,7 @@ const { uploadGallery } = require("../middleware/multer");
 const { getAllBoats, createBoat, updateBoat, deleteBoat } = require("../controllers/boatListerController");
 
 
-boatListerRouter.get("/boatlister", isLoggedIn, getAllBoats);
+boatListerRouter.get("/boatlister", getAllBoats);
 boatListerRouter.post("/boatlister", isLoggedIn, uploadGallery, createBoat);
 boatListerRouter.put("/boatlister/:id",  isLoggedIn, uploadSingle, updateBoat);
 boatListerRouter.delete("/boatlister/:id", isLoggedIn, deleteBoat);

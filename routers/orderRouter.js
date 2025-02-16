@@ -8,14 +8,13 @@ const {
   updateOrder,
   deleteOrder,
   handlePayment,
+  addReview,
 } = require("../controllers/orderController");
+const { isLoggedIn } = require("../middleware/auth");
 
-
-orderRouter.post("/orders", createOrder);
-orderRouter.get("/orders/:userId", getUserOrders);
-orderRouter.get("/orders/:id", getSingleOrder);
+orderRouter.post("/orders", isLoggedIn, createOrder);
+orderRouter.get("/orders", isLoggedIn, getUserOrders);
 orderRouter.put("/orders/:id", updateOrder);
-orderRouter.delete("/orders/:id", deleteOrder);
-orderRouter.post("/orders/payment", handlePayment);
+orderRouter.post("/orders/review", addReview);
 
 module.exports ={ orderRouter};

@@ -1,91 +1,78 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
+
 const orderSchema = new Schema(
   {
     user: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-    products: [
-      {
-        product: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Product",
-          required: true,
-        },
-        quantity: {
-          type: Number,
-          required: true,
-        },
-        size: {
-          type: String,
-          required: true,
-        },
-        color: {
-          type: String,
-          required: true,
-        },
-        price: {
-          type: Number,
-          required: true,
-        },
-      },
-    ],
-    totalAmount: {
+
+    boatDetails: {
+      type: Schema.Types.ObjectId,
+      ref: "BoatLister",
+      required: [true, "Boat lister data is required"],
+    },
+
+    duration: {
+      startDate: { type: Date,  },
+      endDate: { type: Date,  },
+      totalDays: { type: Number, },
+    },
+
+    groupSize: {  
       type: Number,
-      required: true,
+      default: 1,
+      min: [1, "Group size must be at least 1"],
     },
-    status: {
+
+    baseCost: { 
+      type: Number,
+      default: 0,
+      min: [0, "Cost cannot be negative"],
+    },
+
+    paymentServiceFee: { 
+      type: Number,
+      default: 0,
+      min: [0, "Fee cannot be negative"],
+    },
+
+    totalFee: { 
+      type: Number,
+      default: 0,
+      min: [0, "Total fee cannot be negative"],
+    },
+
+    orderStatus: {
       type: String,
-      enum: ["Pending", "Paid", "Shipped", "Delivered", "Cancelled"],
-      default: "Pending",
+      enum: ["pending", "confirmed", "canceled", "completed"],
+      default: "pending",
+      required: [true, "Order status is required"],
     },
+
     paymentStatus: {
       type: String,
-      enum: ["Pending", "Completed", "Failed"],
-      default: "Pending",
-    },
-    paymentMethod: {
-      type: String,
-      enum: ["Stripe", "Other"],
-      required: true,
+      enum: ["unpaid", "paid", "refunded"],
+      default: "unpaid",
+      required: [true, "Payment status is required"],
     },
 
-    paymentId: {
-      type: String,
-      required: true,
-    },
-
-    paymentTimestamp: {
-      type: Date,
-    },
     createdAt: {
       type: Date,
       default: Date.now,
     },
+
     updatedAt: {
       type: Date,
       default: Date.now,
     },
   },
   {
-    timestamps: true,
+    timestamps: true, 
   }
 );
-
-// Middleware to automatically cancel orders if payment is not completed within 72 hours
-orderSchema.pre('save', function (next) {
-  if (this.paymentStatus === 'Pending' && this.createdAt) {
-    const now = new Date();
-    const timeSinceCreated = now - this.createdAt;
-    if (timeSinceCreated > 72 * 60 * 60 * 1000) { // 72 hours in milliseconds
-      this.status = 'Cancelled';
-      this.paymentStatus = 'Failed';
-    }
-  }
-  next();
-});
 
 module.exports = mongoose.model("Order", orderSchema);

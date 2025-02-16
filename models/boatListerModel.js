@@ -8,6 +8,7 @@ const boatListerSchema = new Schema(
       required: [true, "Boat title is required"],
       trim: true,
     },
+
     description: {
       type: String,
       required: [true, "Boat description is required"],
@@ -84,8 +85,13 @@ const boatListerSchema = new Schema(
       required: true,
     },
 
+    featureImage: {
+      type: String,
+      required: true,
+    },
+
     gallery: {
-      type: [String], // Array of image URLs
+      type: [String], 
       validate: {
         validator: function (value) {
           return value.every((url) => /^https?:\/\/.*\.(png|jpg|jpeg|svg|webp)$/i.test(url));
@@ -99,6 +105,18 @@ const boatListerSchema = new Schema(
       default: 0,
       min: [0, "Ratings cannot be negative"],
       max: [5, "Ratings cannot exceed 5"],
+    },
+
+    totalBooking: {
+      type: Number,
+      min: [0, "Booking cannot be negative"],
+      default: 0,
+    },
+
+    boatLister: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: [true, "Boat lister (User) is required"],
     },
 
     reviews: [

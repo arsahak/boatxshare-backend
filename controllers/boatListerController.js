@@ -1,11 +1,174 @@
 const BoatLister = require("../models/boatListerModel");
+const User = require("../models/userModel");
 const createError = require("http-errors");
 const { successResponse } = require("./responseController");
 
-// Get all boat listings with search by title and address
+
+// const getAllBoats = async (req, res, next) => {
+//   try {
+//     const { boatPassengers, location, travelDuration, page = 1, limit = 9 } = req.query;
+
+//     // Convert page and limit to numbers, ensuring minimum values
+//     const pageNum = Math.max(1, parseInt(page, 10));
+//     const limitNum = Math.max(1, parseInt(limit, 10));
+
+//     // Escape special characters for regex search
+//     const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+//     let filter = {};
+
+//     // Passenger Filtering (10 or greater)
+//     if (boatPassengers) {
+//       const passengers = parseInt(boatPassengers, 10);
+//       filter.maxPassengers = passengers > 10 ? { $gte: 10 } : passengers;
+//     }
+
+//     // Location Filtering (Country → Province → City)
+//     if (location) {
+//       const countryFilter = { "address.country": { $regex: escapeRegExp(location), $options: "i" } };
+//       const provinceFilter = { "address.province": { $regex: escapeRegExp(location), $options: "i" } };
+//       const cityFilter = { "address.city": { $regex: escapeRegExp(location), $options: "i" } };
+
+//       // Try finding boats in the country
+//       let totalBoats = await BoatLister.countDocuments(countryFilter);
+//       if (totalBoats === 0) {
+//         // If no boats in country, try province
+//         totalBoats = await BoatLister.countDocuments(provinceFilter);
+//         if (totalBoats === 0) {
+//           // If no boats in province, try city
+//           totalBoats = await BoatLister.countDocuments(cityFilter);
+//           if (totalBoats === 0) {
+//             // If no boats in country, province, or city, return empty result
+//             return successResponse(res, {
+//               statusCode: 200,
+//               message: "No boats found matching the search criteria.",
+//               payload: {
+//                 boats: [],
+//                 pagination: {
+//                   totalPages: 0,
+//                   currentPage: 0,
+//                   previousPage: null,
+//                   nextPage: null,
+//                 },
+//               },
+//             });
+//           }
+//           filter = cityFilter;
+//         } else {
+//           filter = provinceFilter;
+//         }
+//       } else {
+//         filter = countryFilter;
+//       }
+//     }
+
+//     // Get total count of boats matching the filter
+//     const totalBoats = await BoatLister.countDocuments(filter);
+
+//     // Fetch paginated boats sorted by latest updated
+//     const boats = await BoatLister.find(filter)
+//       .limit(limitNum)
+//       .skip((pageNum - 1) * limitNum)
+//       .sort({ updatedAt: -1 })
+//       .exec();
+
+//     const totalPages = Math.ceil(totalBoats / limitNum);
+
+//     return successResponse(res, {
+//       statusCode: 200,
+//       message: "Boats retrieved successfully",
+//       payload: {
+//         boats,
+//         pagination: {
+//           totalPages,
+//           currentPage: pageNum,
+//           previousPage: pageNum > 1 ? pageNum - 1 : null,
+//           nextPage: pageNum < totalPages ? pageNum + 1 : null,
+//         },
+//       },
+//     });
+//   } catch (error) {
+//     next(createError(500, error.message || "Failed to retrieve boats."));
+//   }
+// };
+
+
 const getAllBoats = async (req, res, next) => {
   try {
-    const { title, country, province, city, page = 1, limit = 9} = req.query;
+    // Parse query parameters
+    const search = req.query.search?.trim() || "";
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit, 10) || 10);
+
+    // Escape special characters in search input
+    const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const searchRegExp = new RegExp(escapeRegExp(search), "i");
+
+    let filter = {};
+
+    // If search is provided, add the $or condition
+    if (search) {
+      filter.$or = [
+        { "address.country": searchRegExp },
+        { "address.province": searchRegExp },
+        { "address.city": searchRegExp },
+      ];
+    }
+
+    // Count total boats matching the filter
+    const totalBoatLister = await BoatLister.countDocuments(filter);
+
+    if (totalBoatLister === 0) {
+      return successResponse(res, {
+        statusCode: 200,
+        message: "No BoatLister found matching the search criteria.",
+        payload: {
+          boatLister: [],
+          pagination: {
+            totalPages: 0,
+            currentPage: 0,
+            previousPage: null,
+            nextPage: null,
+          },
+        },
+      });
+    }
+
+    // Fetch boats with pagination and populate user data (excluding password)
+    const boatLister = await BoatLister.find(filter)
+    .populate({
+      path: "boatLister",
+    })
+    .limit(limit)
+    .skip((page - 1) * limit)
+    .exec();
+  
+    const totalPages = Math.ceil(totalBoatLister / limit);
+
+    // Respond with the filtered and paginated data
+    return successResponse(res, {
+      statusCode: 200,
+      message: "BoatLister details successfully returned.",
+      payload: {
+        boatLister,
+        pagination: {
+          totalPages,
+          currentPage: page,
+          previousPage: page > 1 ? page - 1 : null,
+          nextPage: page < totalPages ? page + 1 : null,
+        },
+      },
+    });
+  } catch (error) {
+    next(createError(500, error.message || "Failed to retrieve boatLister details."));
+  }
+};
+
+
+
+const getAllBoatsddd = async (req, res, next) => {
+  try {
+    const { boatPassengers, country, province, city, page = 1, limit = 9} = req.query;
 
     // Convert page and limit to numbers, ensuring minimum values
     const pageNum = Math.max(1, parseInt(page, 10));
@@ -16,9 +179,10 @@ const getAllBoats = async (req, res, next) => {
 
     let filter = {};
 
-    if (title) {
-      filter.title = { $regex: escapeRegExp(title), $options: "i" };
+    if (boatPassengers) {
+      filter.title = { $regex: escapeRegExp(boatPassengers), $options: "i" };
     }
+
     if (country) {
       filter["address.country"] = { $regex: escapeRegExp(country), $options: "i" };
     }
@@ -77,9 +241,13 @@ const getAllBoats = async (req, res, next) => {
 };
 
 
+
+
 // Create a new boat listing
 const createBoat = async (req, res, next) => {
   try {
+
+    const user = req.user
     // Destructure request body
     const {
       title,
@@ -94,8 +262,9 @@ const createBoat = async (req, res, next) => {
       boatModel,
       boatCapacity,
       boatType,
-      bookingOption,
+      bookingsOption,
       boatFuel,
+      featureImage,
       gallery,
       tags,
     } = req.body;
@@ -106,8 +275,8 @@ const createBoat = async (req, res, next) => {
     }
 
     // Validate and format booking options
-    const formattedBookingOption = Array.isArray(bookingOption)
-      ? bookingOption
+    const formattedBookingOption = Array.isArray(bookingsOption)
+      ? bookingsOption
           .filter(option => option?.duration && option?.price) // Ensure valid objects
           .map(option => ({ duration: option.duration.trim(), price: option.price }))
       : [];
@@ -142,7 +311,9 @@ const createBoat = async (req, res, next) => {
       bookingOption: formattedBookingOption,
       boatFuel: boatFuel.trim(), // Ensure it's a string
       gallery: Array.isArray(gallery) ? gallery : [],
+      featureImage: featureImage,
       tags: Array.isArray(tags) ? tags.map(tag => tag.trim()) : [],
+      boatLister: user._id
     });
 
     await newBoat.save();
@@ -166,15 +337,11 @@ const updateBoat = async (req, res, next) => {
     const { id } = req.params;
     const updates = req.body;
 
-    if (req.file) {
-      updates.image = req.file.path; // Cloudinary URL
-    }
-
     const updatedBoat = await BoatLister.findByIdAndUpdate(
       id,
       updates,
       { new: true, runValidators: true }
-    ).populate("category", "name slug");
+    )
 
     if (!updatedBoat) {
       throw createError(404, "Boat not found");
@@ -208,5 +375,6 @@ const deleteBoat = async (req, res, next) => {
     next(error);
   }
 };
+
 
 module.exports = { getAllBoats, createBoat, updateBoat, deleteBoat };

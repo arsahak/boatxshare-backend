@@ -26,14 +26,7 @@ const userSchema = new Schema(
     password: {
       type: String,
       required: [true, "User password is required"],
-      trim: true,
-      minlength: [
-        8,
-        "The length of the user password must be at least 8 characters",
-      ],
-      set: function (value) {
-        return bcrypt.hashSync(value, bcrypt.genSaltSync(10));
-      },
+      minlength: [8, "Password must be at least 8 characters long"],
     },
 
     image: {
@@ -42,7 +35,6 @@ const userSchema = new Schema(
 
     address: {
       type: String,
-      // required: [true, "User address is required"],
     },
 
     phone: {
@@ -63,14 +55,14 @@ const userSchema = new Schema(
     isBoatListerDetails: {
       listingRequest: {
         type: Boolean,
-        default: false
+        default: false,
       },
       listingRequestInfo: {
         question1: { type: String },
         question2: { type: String },
         question3: { type: String },
-        question4: { type: String }
-      }
+        question4: { type: String },
+      },
     },
 
     isBanned: {
@@ -78,11 +70,34 @@ const userSchema = new Schema(
       default: false,
     },
 
+    rating: {
+      type: Number,
+      min: [0, "Rating cannot be negative"],
+      max: [5, "Rating cannot exceed 5"],
+      default: 0,
+    },
 
+    totalBooking: {
+      type: Number,
+      min: [0, "Booking cannot be negative"],
+      default: 0,
+    },
+
+    responseRate: {
+      type: Number,
+      default: 100,
+    },
   },
   { timestamps: true }
 );
 
-const User = model("Users", userSchema);
+// 🔒 Hash password before saving
+userSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+  this.password = await bcrypt.hash(this.password, 10);
+  next();
+});
+
+const User = model("User", userSchema);
 
 module.exports = User;
