@@ -1,9 +1,12 @@
 
-
 const createError = require("http-errors");
 const { successResponse } = require("./responseController");
 const Order = require("../models/orderModel"); // Adjust the path based on your project structure
 
+const { stripeSecretKey } = require("../secret");
+const Stripe = require("stripe");
+
+const stripe = new Stripe(stripeSecretKey);
 
 /**
  * @desc Create a new order
@@ -256,9 +259,52 @@ const getUserOrders = async (req, res, next) => {
   }
 };
 
+// Check order payment
+
+
+const createPaymentIntents =  async (req, res, next) => {
+  try {
+    const { amount } = req.body;
+console.log("check adhfsdf");
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ message: "Invalid amount provided." });
+    }
+
+    // Calculate split (90% to boat owner, 10% to site owner)
+    const boatOwnerAmount = Math.round(amount * 0.9);
+    const siteOwnerAmount = Math.round(amount * 0.1);
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      mode: "payment",
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: { name: "Boat Rental" },
+            unit_amount: amount,
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: "http://localhost:3000/success?session_id={CHECKOUT_SESSION_ID}",
+      cancel_url: "http://localhost:3000/cancel",
+    });
+
+    return res.status(200).json({
+      message: "Checkout session created successfully.",
+      payload: { sessionId: session.id },
+    });
+  } catch (error) {
+    next(new Error(error.message || "Failed to create checkout session."));
+  }
+}
+
 module.exports = {
   createOrder,
   updateOrder,
   getUserOrders,
-  addReview
+  addReview,
+  createPaymentIntents
 };

@@ -33,7 +33,7 @@
     "passport": "^0.6.0",
     "passport-jwt": "^4.0.0",
     "puppeteer": "^24.0.0",
-    "stripe": "^17.4.0",
+    "stripe": "^17.7.0",
     "uuid": "^8.3.2",
     "winston": "^3.17.0",
     "xss-clean": "^0.1.4"
